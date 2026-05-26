@@ -34,8 +34,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Debug environment
+        run: |
+          python --version
+          pip show interpret yfinance pandas-datareader nbconvert ipykernel | grep -E "^(Name|Version)"
+          python -c "import yfinance; print('yfinance', yfinance.__version__)"
+          python -c "import interpret; print('interpret', interpret.__version__)"
+
       - name: Register IPython kernel
-        run: python -m ipykernel install --user --name python3
+        run: |
+          python -m ipykernel install --user --name spy_pipeline --display-name "SPY Pipeline"
+          jupyter kernelspec list
 
       - name: Override FAST_MODE if requested
         if: github.event_name == 'workflow_dispatch'
@@ -64,7 +73,8 @@ jobs:
             --to notebook \
             --execute \
             --ExecutePreprocessor.timeout=7200 \
-            --ExecutePreprocessor.kernel_name=python3 \
+            --ExecutePreprocessor.kernel_name=spy_pipeline \
+            --ExecutePreprocessor.allow_errors=False \
             --output ebm_sector_etf_pipeline_executed.ipynb \
             ebm_sector_etf_pipeline.ipynb
 
@@ -86,6 +96,7 @@ jobs:
             ebm_sector_etf_pipeline_executed.ipynb
             ebm_sector_etf_pipeline_report.html
             outputs/*.png
+          if-no-files-found: warn
           retention-days: 30
 
       - name: Print summary
