@@ -1,0 +1,105 @@
+name: EBM Sector ETF Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  workflow_dispatch:
+    inputs:
+      fast_mode:
+        description: "Use FAST_MODE (lighter EBM params)"
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Register IPython kernel
+        run: python -m ipykernel install --user --name python3
+
+      - name: Override FAST_MODE if requested
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          python - <<'EOF'
+          import json, pathlib
+          nb_path = pathlib.Path('ebm_sector_etf_pipeline.ipynb')
+          nb = json.loads(nb_path.read_text())
+          fast = "${{ github.event.inputs.fast_mode }}" == "true"
+          for cell in nb['cells']:
+              if cell['cell_type'] == 'code':
+                  src = ''.join(cell['source'])
+                  if 'FAST_MODE' in src:
+                      cell['source'] = [
+                          line.replace('FAST_MODE      = True', f'FAST_MODE      = {fast}')
+                              .replace('FAST_MODE = True', f'FAST_MODE = {fast}')
+                          for line in cell['source']
+                      ]
+          nb_path.write_text(json.dumps(nb, indent=1))
+          print(f"FAST_MODE set to {fast}")
+          EOF
+
+      - name: Execute notebook
+        run: |
+          jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --ExecutePreprocessor.timeout=7200 \
+            --ExecutePreprocessor.kernel_name=python3 \
+            --output ebm_sector_etf_pipeline_executed.ipynb \
+            ebm_sector_etf_pipeline.ipynb
+
+      - name: Convert executed notebook to HTML
+        if: always()
+        run: |
+          jupyter nbconvert \
+            --to html \
+            ebm_sector_etf_pipeline_executed.ipynb \
+            --output ebm_sector_etf_pipeline_report.html \
+            || echo "HTML conversion skipped (notebook may not have completed)"
+
+      - name: Upload notebook artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-results-${{ github.run_number }}
+          path: |
+            ebm_sector_etf_pipeline_executed.ipynb
+            ebm_sector_etf_pipeline_report.html
+            outputs/*.png
+          retention-days: 30
+
+      - name: Print summary
+        if: always()
+        run: |
+          echo "## Pipeline Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run | #${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -d "outputs" ]; then
+            echo "### Output files" >> $GITHUB_STEP_SUMMARY
+            ls outputs/ | while read f; do echo "- \`outputs/$f\`" >> $GITHUB_STEP_SUMMARY; done
+          fi
