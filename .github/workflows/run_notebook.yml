@@ -17,7 +17,7 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -72,7 +72,7 @@ jobs:
           jupyter nbconvert \
             --to notebook \
             --execute \
-            --ExecutePreprocessor.timeout=7200 \
+            --ExecutePreprocessor.timeout=2400 \
             --ExecutePreprocessor.kernel_name=spy_pipeline \
             --ExecutePreprocessor.allow_errors=False \
             --output ebm_sector_etf_pipeline_executed.ipynb \
