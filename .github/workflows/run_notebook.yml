@@ -1,4 +1,4 @@
-name: EBM Sector ETF Pipeline
+name: EBM SPY Pipeline (Long + Short)
 
 on:
   push:
@@ -13,13 +13,33 @@ on:
         default: "true"
         type: choice
         options: ["true", "false"]
+      run_side:
+        description: "Which side to run"
+        required: false
+        default: "both"
+        type: choice
+        options: ["both", "long", "short"]
 
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
+
+    strategy:
+      fail-fast: false
+      matrix:
+        side: [long, short]
 
     steps:
+      - name: Skip if side filtered out
+        if: |
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.run_side != 'both' &&
+          github.event.inputs.run_side != matrix.side
+        run: |
+          echo "Skipping ${{ matrix.side }} side (filtered by run_side input)"
+          exit 0
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -37,14 +57,32 @@ jobs:
       - name: Register IPython kernel
         run: python -m ipykernel install --user --name python3
 
+      - name: Resolve notebook path
+        id: paths
+        run: |
+          if [ "${{ matrix.side }}" = "long" ]; then
+            echo "nb=ebm_sector_etf_pipeline.ipynb"            >> $GITHUB_OUTPUT
+            echo "out_dir=outputs"                              >> $GITHUB_OUTPUT
+            echo "executed=ebm_sector_etf_pipeline_executed.ipynb" >> $GITHUB_OUTPUT
+            echo "html=ebm_sector_etf_pipeline_report.html"     >> $GITHUB_OUTPUT
+          else
+            echo "nb=ebm_sector_etf_pipeline_short.ipynb"       >> $GITHUB_OUTPUT
+            echo "out_dir=outputs_short"                         >> $GITHUB_OUTPUT
+            echo "executed=ebm_sector_etf_pipeline_short_executed.ipynb" >> $GITHUB_OUTPUT
+            echo "html=ebm_sector_etf_pipeline_short_report.html" >> $GITHUB_OUTPUT
+          fi
+
       - name: Override FAST_MODE if requested
         if: github.event_name == 'workflow_dispatch'
+        env:
+          NB_PATH: ${{ steps.paths.outputs.nb }}
+          FAST: ${{ github.event.inputs.fast_mode }}
         run: |
           python - <<'EOF'
-          import json, pathlib
-          nb_path = pathlib.Path('ebm_sector_etf_pipeline.ipynb')
+          import json, os, pathlib
+          nb_path = pathlib.Path(os.environ['NB_PATH'])
           nb = json.loads(nb_path.read_text())
-          fast = "${{ github.event.inputs.fast_mode }}" == "true"
+          fast = os.environ['FAST'] == 'true'
           for cell in nb['cells']:
               if cell['cell_type'] == 'code':
                   src = ''.join(cell['source'])
@@ -55,51 +93,53 @@ jobs:
                           for line in cell['source']
                       ]
           nb_path.write_text(json.dumps(nb, indent=1))
-          print(f"FAST_MODE set to {fast}")
+          print(f"FAST_MODE set to {fast} in {nb_path}")
           EOF
 
-      - name: Execute notebook
+      - name: Execute notebook (${{ matrix.side }})
         run: |
           jupyter nbconvert \
             --to notebook \
             --execute \
             --ExecutePreprocessor.timeout=7200 \
             --ExecutePreprocessor.kernel_name=python3 \
-            --output ebm_sector_etf_pipeline_executed.ipynb \
-            ebm_sector_etf_pipeline.ipynb
+            --output ${{ steps.paths.outputs.executed }} \
+            ${{ steps.paths.outputs.nb }}
 
       - name: Convert executed notebook to HTML
         if: always()
         run: |
           jupyter nbconvert \
             --to html \
-            ebm_sector_etf_pipeline_executed.ipynb \
-            --output ebm_sector_etf_pipeline_report.html \
+            ${{ steps.paths.outputs.executed }} \
+            --output ${{ steps.paths.outputs.html }} \
             || echo "HTML conversion skipped (notebook may not have completed)"
 
-      - name: Upload notebook artifacts
+      - name: Upload artifacts (${{ matrix.side }})
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pipeline-results-${{ github.run_number }}
+          name: pipeline-${{ matrix.side }}-${{ github.run_number }}
           path: |
-            ebm_sector_etf_pipeline_executed.ipynb
-            ebm_sector_etf_pipeline_report.html
-            outputs/*.png
+            ${{ steps.paths.outputs.executed }}
+            ${{ steps.paths.outputs.html }}
+            ${{ steps.paths.outputs.out_dir }}/*.png
           retention-days: 30
 
-      - name: Print summary
+      - name: Step summary
         if: always()
         run: |
-          echo "## Pipeline Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Pipeline (${{ matrix.side }}) — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Side | \`${{ matrix.side }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Run | #${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -d "outputs" ]; then
+          if [ -d "${{ steps.paths.outputs.out_dir }}" ]; then
             echo "### Output files" >> $GITHUB_STEP_SUMMARY
-            ls outputs/ | while read f; do echo "- \`outputs/$f\`" >> $GITHUB_STEP_SUMMARY; done
+            ls ${{ steps.paths.outputs.out_dir }}/ | while read f; do
+              echo "- \`${{ steps.paths.outputs.out_dir }}/$f\`" >> $GITHUB_STEP_SUMMARY
+            done
           fi

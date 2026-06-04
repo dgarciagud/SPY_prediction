@@ -78,6 +78,17 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Pipeline outputs (regenerable by running the notebooks)
+outputs/
+outputs_short/
+
+# Local venvs
+.venv*/
+
+# Executed notebooks (CI artifacts)
+*_executed.ipynb
+*_report.html
+
 # IPython
 profile_default/
 ipython_config.py
