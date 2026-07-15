@@ -138,6 +138,25 @@ hypotheses:
       - macro_vix_level
       - macro_vix_chg_5
 
+  # -- Intradía (probada y RECHAZADA, ver src/alpha_selection/intraday/FINDINGS.md)
+  - id: intraday_breakout_continuation
+    rationale: >
+      Un breakout del rango de apertura en la dirección del gap overnight
+      debería continuar (gap-and-go): la información overnight se sigue
+      descontando durante la sesión.
+    direction: positive
+    horizon: intraday
+    status: rejected
+    evidence: >
+      SPX500 1-min 2005-2016 (discovery). Breakout incondicional sin edge
+      (t~0, follow-through ~48-50%). El corte de continuación del gap daba
+      +6.07 bps t=2.70, pero ex-2008 cae a t=1.56 y es negativo neto de coste.
+      No reproducible fuera de un régimen. OOS 2017+ NO gastado.
+    features:
+      - orb_gap_alignment
+      - orb_breakout_minute
+      - orb_range_width
+
 # ---------------------------------------------------------------------
 # Candidatas "en cuarentena": ideas sin mecanismo claro todavía.
 # NO entran al pool de selección hasta que tengan rationale. Si no lo

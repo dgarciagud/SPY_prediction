@@ -82,6 +82,23 @@ log te lo cuenta para que tu DSR use el número honesto.
 Si nada supera el umbral, la respuesta correcta no es aflojar el umbral: es que
 no hay estructura reproducible y toca revisar las hipótesis.
 
+## Estudio intradía: breakouts en SPX500
+
+`src/alpha_selection/intraday/` aplica la misma disciplina a datos de 1 minuto
+de FutureSharks (Oanda `SPX500_USD`, 2005–2020): discovery vs OOS 2017+ sellado,
+coste explícito, sin torneo de parámetros.
+
+```bash
+# reconstruir caché desde los CSV de FutureSharks y analizar
+python scripts/analyze_breakouts.py --spx-dir <.../SPX500_USD> --cache data/spx_rth.parquet --build
+```
+
+**Resultado (ver `src/alpha_selection/intraday/FINDINGS.md`):** el breakout
+intradía no tiene edge tradeable en el SPX. El incondicional da t≈0; la única
+hipótesis condicional coherente (continuación del gap) da t=2.70 en bruto pero
+se cae ex-2008 y es negativa neta de coste. El OOS quedó **sellado** — no hay
+candidato que validar.
+
 ## Tests
 
 ```bash
