@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# Datos: nunca versionar el panel real ni intermedios.
+data/
+*.parquet
+*.pq
+*.csv
+
+# Los logs de variantes SÍ se versionan (son la contabilidad DSR),
+# pero no los ignores por accidente con la regla de arriba:
+!logs/
+!logs/*.jsonl
+
+.DS_Store
