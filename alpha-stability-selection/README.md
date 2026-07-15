@@ -34,7 +34,12 @@ El orden real que implementa este repo:
 
 ## Estructura
 
+El **proceso vive en dos notebooks** (punto de entrada); la lógica reutilizable y
+testeada vive en `src/`, que los notebooks importan.
+
 ```
+01_seleccion_por_estabilidad.ipynb   Proceso del motor: gate -> selección -> OOS -> log
+02_breakouts_intradia.ipynb          Estudio intradía SPX500 (FutureSharks)
 hypotheses/registry.yaml     Hipótesis económicas -> candidatas (el gate)
 config/selection.yaml        El procedimiento (= una variante). No es un grid.
 src/alpha_selection/
@@ -43,10 +48,9 @@ src/alpha_selection/
   stability.py               Selección por estabilidad: ElasticNet + árboles
   variants.py                Log append-only = contabilidad del presupuesto DSR
   report.py                  Reporte legible
-scripts/
-  run_selection.py           Corre 1 procedimiento y lo registra como 1 variante
-  make_synthetic.py          Panel sintético para smoke-test
-logs/variants.jsonl          Cuántas variantes has probado (versionado)
+  synthetic.py               Panel sintético de estructura conocida (demo NB1)
+  intraday/                  Loader + setups de breakout (usados por NB2)
+scripts/publish_repo.sh      Independiza esta carpeta como repo propio
 tests/                       Recupera señal, descarta ruido, sella OOS
 ```
 
@@ -54,23 +58,23 @@ tests/                       Recupera señal, descarta ruido, sella OOS
 
 ```bash
 pip install -r requirements.txt
-
-# 1) smoke-test con datos sintéticos de estructura conocida
-python scripts/make_synthetic.py --out data/synthetic_discovery.parquet
-python scripts/run_selection.py --data data/synthetic_discovery.parquet --label smoke
-
-# 2) con tus datos reales (date + candidatas del registro + target)
-python scripts/run_selection.py \
-    --data data/discovery.parquet \
-    --registry hypotheses/registry.yaml \
-    --config config/selection.yaml \
-    --label baseline
+jupyter notebook   # abre 01_seleccion_por_estabilidad.ipynb  o  02_breakouts_intradia.ipynb
 ```
 
-`run_selection.py` sella el OOS, aplica el gate de hipótesis, corre el
-procedimiento una vez, imprime el reporte y **añade una línea** al log de
-variantes. Si vuelves a correrlo con otra config, eso es **otra variante**: el
-log te lo cuenta para que tu DSR use el número honesto.
+**Notebook 1** narra el motor sobre datos sintéticos de estructura conocida: aplica
+el gate de hipótesis, sella el OOS, corre la selección por estabilidad **una vez**,
+recorta por parsimonia y registra la variante. Con tus datos reales, sustituye
+`make_synthetic_discovery()` por tu panel (date + candidatas del registro + target)
+en la sección 2.
+
+**Notebook 2** descarga los datos intradía de FutureSharks y evalúa breakouts
+(ver más abajo). Ambos importan de `src/alpha_selection`; para correr la selección
+de forma programática:
+
+```python
+import sys; sys.path.insert(0, "src")
+from alpha_selection import HypothesisRegistry, DataSplit, StabilityConfig, stability_select, log_variant
+```
 
 ## Lo que este repo NO hace (a propósito)
 
@@ -84,14 +88,11 @@ no hay estructura reproducible y toca revisar las hipótesis.
 
 ## Estudio intradía: breakouts en SPX500
 
-`src/alpha_selection/intraday/` aplica la misma disciplina a datos de 1 minuto
-de FutureSharks (Oanda `SPX500_USD`, 2005–2020): discovery vs OOS 2017+ sellado,
-coste explícito, sin torneo de parámetros.
-
-```bash
-# reconstruir caché desde los CSV de FutureSharks y analizar
-python scripts/analyze_breakouts.py --spx-dir <.../SPX500_USD> --cache data/spx_rth.parquet --build
-```
+`02_breakouts_intradia.ipynb` (con la lógica en `src/alpha_selection/intraday/`)
+aplica la misma disciplina a datos de 1 minuto de FutureSharks (Oanda
+`SPX500_USD`, 2005–2020): discovery vs OOS 2017+ sellado, coste explícito, sin
+torneo de parámetros. El propio notebook descarga los datos (sparse clone) y
+construye la caché RTH.
 
 **Resultado (ver `src/alpha_selection/intraday/FINDINGS.md`):** el breakout
 intradía no tiene edge tradeable en el SPX. El incondicional da t≈0; la única

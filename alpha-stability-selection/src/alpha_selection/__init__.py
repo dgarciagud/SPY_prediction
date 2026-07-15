@@ -17,6 +17,9 @@ from .stability import (
     shallow_tree_selection_frequency,
 )
 from .variants import VariantLog, log_variant
+from .registry import HypothesisRegistry
+from .report import render_report
+from .synthetic import make_synthetic_discovery
 
 __all__ = [
     "DataSplit",
@@ -28,6 +31,9 @@ __all__ = [
     "shallow_tree_selection_frequency",
     "VariantLog",
     "log_variant",
+    "HypothesisRegistry",
+    "render_report",
+    "make_synthetic_discovery",
 ]
 
 __version__ = "0.1.0"
